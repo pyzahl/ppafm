@@ -75,7 +75,9 @@ TTips = {
     "ScanStart": "Scan start: bottom left position of scan region in x and y directions.",
     "Distance": "Distance: Average tip distance from the nucleus of the closest atom.",
     "Amplitude": "Amplitude: Peak-to-peak oscillation amplitude for the tip.",
-    "Rotation": "Rotation: Set sample counter-clockwise rotation angle around center of atom coordinates.",
+#    "Rotation": "Rotation: Set sample counter-clockwise rotation angle around center of atom coordinates.",
+    "Rotation": "Rotation: Set sample counter-clockwise rotation angle around the chosen axis.",
+    "RotationAxis": "Rotation axis: Non-zero vector defining the rotation axis.",
     "fdbm_V0": "FDBM V0: Prefactor in Pauli interaction integral in the full-density based model.",
     "fdbm_alpha": "FDBM alpha: Exponent in Pauli interaction integral in the full-density based model.",
     "fdbm_cutoff": "Density cutoff: cut out high values of the electron density. Useful when working with all-electron densities where extremely high values can arise near nuclei, causing artifacts in the images.",
@@ -92,6 +94,28 @@ TTips = {
     "view_ff": "View Forcefield: View forcefield components in a separate window.",
     "edit_ff": "Edit Forcefield: Edit Lennard-Jones parameters of forcefield.",
 }
+
+
+
+def rotation_matrix_from_axis_angle(axis, angle_deg):
+    """Return a 3x3 rotation matrix for rotation by angle_deg around axis."""
+    axis = np.asarray(axis, dtype=float)
+    norm = np.linalg.norm(axis)
+    if norm == 0:
+        raise ValueError("Rotation axis must be non-zero.")
+    axis = axis / norm
+
+    theta = np.deg2rad(angle_deg)
+    x, y, z = axis
+    c = np.cos(theta)
+    s = np.sin(theta)
+    C = 1.0 - c
+
+    return np.array([
+        [c + x * x * C,     x * y * C - z * s, x * z * C + y * s],
+        [y * x * C + z * s, c + y * y * C,     y * z * C - x * s],
+        [z * x * C - y * s, z * y * C + x * s, c + z * z * C],
+    ])
 
 
 def parse_args():
@@ -134,6 +158,7 @@ class ApplicationWindow(QtWidgets.QMainWindow):
         self.rho_tip_delta = None
         self.sample_lvec = None
         self.rot = np.eye(3)
+        self.rot_axis = np.array([0.0, 0.0, 1.0], dtype=float)        
         self.df_points = []
         self.previous_cutoff = None
 
@@ -255,18 +280,44 @@ class ApplicationWindow(QtWidgets.QMainWindow):
         self.setScanWindow(scan_size, scan_start, step, distance, amplitude)
         self.update()
 
+#    def updateRotation(self):
+#        """Get rotation from input field and update"""
+#        a = self.bxRot.value() / 180 * np.pi
+#        # fmt: off
+#        self.rot = np.array([
+#            [np.cos(a), -np.sin(a), 0],
+#            [np.sin(a),  np.cos(a), 0],
+#            [        0,          0, 1]
+#        ])  # fmt: on
+#        logger.debug(f"updateRotation {a}, {self.rot}")
+#        self.update()
+
+
     def updateRotation(self):
         """Get rotation from input field and update"""
-        a = self.bxRot.value() / 180 * np.pi
-        # fmt: off
-        self.rot = np.array([
-            [np.cos(a), -np.sin(a), 0],
-            [np.sin(a),  np.cos(a), 0],
-            [        0,          0, 1]
-        ])  # fmt: on
-        logger.debug(f"updateRotation {a}, {self.rot}")
+
+        radf = 1 #np.pi/180.
+        axis = np.array(
+            [self.bxRotAx.value()*radf, self.bxRotAy.value()*radf, self.bxRotAz.value()*radf],
+            dtype=float,
+        )
+        angle = self.bxRot.value()*radf
+
+        print ("Molecule Rot = {}".format(axis))
+        
+        try:
+            self.rot = rotation_matrix_from_axis_angle(axis, angle)
+            self.rot_axis = axis
+        except ValueError:
+            self.rot = np.eye(3)
+            logger.warning("Zero rotation axis; falling back to identity rotation.")
+ 
+        logger.debug(f"updateRotation angle={angle}, axis={axis}, rot=\n{self.rot}")
+ 
         self.update()
 
+
+        
     def updateParams(self, preset_none=True):
         """Get parameter values from input fields and update"""
 
@@ -651,7 +702,7 @@ class ApplicationWindow(QtWidgets.QMainWindow):
             logger.debug(traceback.format_exc())
             return
         atoms = Atoms(
-            positions=self.xyzs,
+            positions=self.xyzs @ self.rot.T,
             numbers=self.Zs,
             cell=self.sample_lvec,
             pbc=self.afmulator.npbc,
@@ -1024,6 +1075,7 @@ class ApplicationWindow(QtWidgets.QMainWindow):
         self.bxCutoffValue = _spin_box((0.1, 10000.0), 100.0, 10.0, self.updateParams, TTips["fdbm_cutoff"], vb)
         self.bxCutoffValue.setDisabled(True)
 
+        
     def _create_scan_settings_ui(self):
         # Title
         vb = QtWidgets.QHBoxLayout()
@@ -1088,6 +1140,14 @@ class ApplicationWindow(QtWidgets.QMainWindow):
         vb.addWidget(lb)
         self.bxRot = _spin_box((-360.0, 360.0), 0.0, 5.0, self.updateRotation, TTips["Rotation"], vb)
 
+        lb = QtWidgets.QLabel("Axis (x,y,z)")
+        lb.setToolTip(TTips["RotationAxis"])
+        vb.addWidget(lb)
+        self.bxRotAx = _spin_box((-360.0, 360.0), 0.0, 5.0, self.updateRotation, TTips["RotationAxis"], vb)
+        self.bxRotAy = _spin_box((-360.0, 360.0), 0.0, 5.0, self.updateRotation, TTips["RotationAxis"], vb)
+        self.bxRotAz = _spin_box((-360.0, 360.0), 1.0, 5.0, self.updateRotation, TTips["RotationAxis"], vb)
+
+        
     def _create_pbc_settings_ui(self):
         # Title
         vb = QtWidgets.QHBoxLayout()

@@ -1143,9 +1143,9 @@ class ApplicationWindow(QtWidgets.QMainWindow):
         lb = QtWidgets.QLabel("Axis (x,y,z)")
         lb.setToolTip(TTips["RotationAxis"])
         vb.addWidget(lb)
-        self.bxRotAx = _spin_box((-360.0, 360.0), 0.0, 5.0, self.updateRotation, TTips["RotationAxis"], vb)
-        self.bxRotAy = _spin_box((-360.0, 360.0), 0.0, 5.0, self.updateRotation, TTips["RotationAxis"], vb)
-        self.bxRotAz = _spin_box((-360.0, 360.0), 1.0, 5.0, self.updateRotation, TTips["RotationAxis"], vb)
+        self.bxRotAx = _spin_box((-1.0, 1.0), 0.0, 0.1, self.updateRotation, TTips["RotationAxis"], vb)
+        self.bxRotAy = _spin_box((-1.0, 1.0), 0.0, 0.1, self.updateRotation, TTips["RotationAxis"], vb)
+        self.bxRotAz = _spin_box((-1.0, 1.0), 1.0, 0.1, self.updateRotation, TTips["RotationAxis"], vb)
 
         
     def _create_pbc_settings_ui(self):
